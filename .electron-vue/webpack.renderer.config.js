@@ -32,17 +32,6 @@ let rendererConfig = {
   module: {
     rules: [
       {
-        test: /\.(js|vue)$/,
-        enforce: 'pre',
-        exclude: /node_modules/,
-        use: {
-          loader: 'eslint-loader',
-          options: {
-            formatter: require('eslint-friendly-formatter')
-          }
-        }
-      },
-      {
         test: /\.scss$/,
         use: ['vue-style-loader', 'css-loader', 'sass-loader']
       },
@@ -168,6 +157,18 @@ let rendererConfig = {
  * Adjust rendererConfig for development settings
  */
 if (process.env.NODE_ENV !== 'production') {
+  rendererConfig.module.rules.unshift({
+    test: /\.(js|vue)$/,
+    enforce: 'pre',
+    exclude: /node_modules/,
+    use: {
+      loader: 'eslint-loader',
+      options: {
+        formatter: require('eslint-friendly-formatter')
+      }
+    }
+  })
+
   rendererConfig.plugins.push(
     new webpack.DefinePlugin({
       '__static': `"${path.join(__dirname, '../static').replace(/\\/g, '\\\\')}"`
