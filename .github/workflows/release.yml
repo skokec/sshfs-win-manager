@@ -24,8 +24,15 @@ jobs:
         with:
           node-version: '14'
 
+      - name: Normalize version input
+        id: version
+        run: |
+          $normalizedVersion = "${{ github.event.inputs.version }}" -replace '^v', ''
+          "value=$normalizedVersion" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
       - name: Update version in package.json
-        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version
+        run: npm version ${{ steps.version.outputs.value }} --no-git-tag-version
 
       - name: Install dependencies
         run: npm install --ignore-scripts
@@ -37,7 +44,7 @@ jobs:
 
       - name: Verify build artifact
         run: |
-          $artifact = "build\sshfs-win-manager-setup-v${{ github.event.inputs.version }}.exe"
+          $artifact = "build\sshfs-win-manager-setup-v${{ steps.version.outputs.value }}.exe"
           if (-not (Test-Path $artifact)) {
             Write-Error "Build artifact not found: $artifact"
             exit 1
@@ -48,7 +55,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.event.inputs.version }}
-          name: v${{ github.event.inputs.version }}
-          files: build/sshfs-win-manager-setup-v${{ github.event.inputs.version }}.exe
+          tag_name: v${{ steps.version.outputs.value }}
+          name: v${{ steps.version.outputs.value }}
+          files: build/sshfs-win-manager-setup-v${{ steps.version.outputs.value }}.exe
           generate_release_notes: true
