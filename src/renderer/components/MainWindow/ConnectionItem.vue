@@ -30,14 +30,14 @@
         <Icon icon="openFolder"/>
       </button>
 
-      <button v-show="showConnectButton" :class="{ 'success': isConnected, 'connecting-disconnecting': isConnectingOrDisconnecting }" :disabled="isConnectingOrDisconnecting" @click="$emit(isConnected ? 'disconnect' : 'connect', conn)">
-        <svg v-show="isConnectingOrDisconnecting" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <button v-show="showConnectButton" :class="{ 'success': isConnected, 'connecting-disconnecting': isConnectingOrDisconnecting || isReconnecting }" :disabled="isConnectingOrDisconnecting" @click="$emit(isConnected || isReconnecting ? 'disconnect' : 'connect', conn)">
+        <svg v-show="isConnectingOrDisconnecting || isReconnecting" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
           <circle cx="50" cy="50" fill="none" stroke-width="10" r="35" stroke-dasharray="164.93361431346415 56.97787143782138" transform="rotate(108.558 50 50)">
             <animateTransform attributeName="transform" type="rotate" repeatCount="indefinite" dur="1s" values="0 50 50;360 50 50" keyTimes="0;1"></animateTransform>
           </circle>
         </svg>
         
-        <Icon v-show="!isConnectingOrDisconnecting" :icon="isConnected ? 'plugConnected' : 'plugDisconnected'"/>
+        <Icon v-show="!isConnectingOrDisconnecting && !isReconnecting" :icon="isConnected ? 'plugConnected' : 'plugDisconnected'"/>
       </button>
 
       <button v-show="showDeleteButton" class="danger" @click="$emit('delete', conn)">
@@ -83,16 +83,20 @@ export default {
       return this.conn.status === 'connected'
     },
 
+    isReconnecting () {
+      return this.conn.status === 'reconnecting'
+    },
+
     isConnectingOrDisconnecting () {
       return this.conn.status === 'connecting' || this.conn.status === 'disconnecting'
     },
 
     showConnectButton () {
-      return this.mode === 'none' || this.isConnected || this.isConnectingOrDisconnecting
+      return this.mode === 'none' || this.isConnected || this.isConnectingOrDisconnecting || this.isReconnecting
     },
 
     isEditing () {
-      return this.mode === 'edit' && !this.isConnected && !this.isConnectingOrDisconnecting
+      return this.mode === 'edit' && !this.isConnected && !this.isConnectingOrDisconnecting && !this.isReconnecting
     },
 
     showMoveGrip () {
@@ -100,7 +104,7 @@ export default {
     },
 
     showDeleteButton () {
-      return this.mode === 'delete' && !this.isConnected && !this.isConnectingOrDisconnecting
+      return this.mode === 'delete' && !this.isConnected && !this.isConnectingOrDisconnecting && !this.isReconnecting
     },
 
     mountPointLabel () {

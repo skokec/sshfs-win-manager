@@ -79,6 +79,8 @@ import ConnectionItem from './ConnectionItem'
 
 const windowManager = remote.require('electron-window-manager')
 
+const RECONNECT_DELAY = 10000
+
 export default {
   name: 'main-window',
 
@@ -100,25 +102,36 @@ export default {
       this.listMode = this.listMode === 'edit' ? 'none' : 'edit'
     },
 
-    connect (conn) {
+    connect (conn, isAutoReconnect = false) {
       conn.status = 'connecting'
 
-      const connect = c => {
+      const doConnect = c => {
         ProcessManager.create(c).then(pid => {
           conn.pid = pid
           conn.status = 'connected'
 
           this.updateConnectionList()
         }).catch(error => {
-          conn.status = 'disconnected'
-
-          this.updateConnectionList()
-
-          this.notify(`Can't connect to '${conn.name}': ${error}`, 'error-icon')
+          if (isAutoReconnect) {
+            conn.status = 'reconnecting'
+            this.updateConnectionList()
+            this.scheduleReconnect(conn)
+          } else {
+            conn.status = 'disconnected'
+            this.updateConnectionList()
+            this.notify(`Can't connect to '${conn.name}': ${error}`, 'error-icon')
+          }
         })
       }
 
       if (conn.authType === 'password-ask') {
+        if (isAutoReconnect) {
+          conn.status = 'disconnected'
+          this.updateConnectionList()
+          this.notify(`'${conn.name}' was disconnected. Please reconnect manually.`, 'error-icon')
+          return
+        }
+
         const window = windowManager.createNew('password-prompt-window', '', `/index.html#password-prompt/${conn.uuid}`, null, {
           height: 190,
           width: 350,
@@ -138,7 +151,7 @@ export default {
         windowManager.bridge.once('main-window-message', data => {
           switch (data.message) {
             case 'connection-password':
-              connect(data.conn)
+              doConnect(data.conn)
               break
 
             case 'connection-password-cancel':
@@ -147,11 +160,20 @@ export default {
           }
         })
       } else {
-        connect(conn)
+        doConnect(conn)
       }
     },
 
     disconnect (conn) {
+      this.clearReconnectTimer(conn)
+
+      // No process to terminate when cancelling a pending autoreconnect
+      if (!conn.pid) {
+        conn.status = 'disconnected'
+        this.updateConnectionList()
+        return
+      }
+
       conn.status = 'disconnecting'
 
       ProcessManager.terminate(conn.pid).then(() => {
@@ -159,6 +181,29 @@ export default {
 
         this.updateConnectionList()
       })
+    },
+
+    scheduleReconnect (conn) {
+      this.clearReconnectTimer(conn)
+
+      this.reconnectTimers[conn.uuid] = setTimeout(() => {
+        delete this.reconnectTimers[conn.uuid]
+
+        if (conn.status === 'reconnecting') {
+          this.connect(conn, true)
+        }
+      }, RECONNECT_DELAY)
+    },
+
+    clearReconnectTimer (conn) {
+      if (this.reconnectTimers[conn.uuid]) {
+        clearTimeout(this.reconnectTimers[conn.uuid])
+        delete this.reconnectTimers[conn.uuid]
+      }
+    },
+
+    shouldAutoReconnect (conn) {
+      return (conn.advanced && conn.advanced.reconnect) && conn.authType !== 'password-ask'
     },
 
     openLocal (path) {
@@ -213,6 +258,8 @@ export default {
     },
 
     deleteConnection (conn) {
+      this.clearReconnectTimer(conn)
+
       this.$store.dispatch('DELETE_CONNECTION', conn)
 
       setTimeout(() => {
@@ -330,7 +377,8 @@ export default {
     return {
       listMode: 'none',
       runningInBackgroundNotificationShowed: false,
-      debugOutput: ''
+      debugOutput: '',
+      reconnectTimers: {}
     }
   },
 
@@ -376,9 +424,17 @@ export default {
 
       if (conn) {
         conn.pid = null
-        conn.status = 'disconnected'
 
-        this.notify(`'${conn.name}' was disconnected due to a connection error.\nCheck your internet connection`, 'error-icon')
+        if (this.shouldAutoReconnect(conn)) {
+          conn.status = 'reconnecting'
+          this.updateConnectionList()
+          this.notify(`'${conn.name}' was disconnected. Attempting to reconnect...`, 'error-icon')
+          this.scheduleReconnect(conn)
+        } else {
+          conn.status = 'disconnected'
+          this.updateConnectionList()
+          this.notify(`'${conn.name}' was disconnected due to a connection error.\nCheck your internet connection`, 'error-icon')
+        }
       }
     })
 
